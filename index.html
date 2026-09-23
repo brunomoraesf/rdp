@@ -5,9 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Registro Diário de Processos.exe</title>
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <style></style>
     <link rel="stylesheet" href="estilos.css">
 </head>
 
@@ -15,9 +13,9 @@
 
     <div id="statusPopup"></div>
 
-    <!-- Modal de erro (apenas OK) -->
-    <div id="modalErroOverlay" class="overlay" style="z-index: 15000;">
-        <div style="width: 90%; max-width: 300px; background: #ECE9D8; border: 1px solid #003399;">
+    <!-- Modal de erro -->
+    <div id="modalErroOverlay" class="overlay">
+        <div class="modal-box" style="width: 90%; max-width: 320px; background: #ECE9D8; border: 1px solid #003399;">
             <div class="title-bar">
                 <span>Erro</span>
                 <div class="title-bar-controls">
@@ -25,15 +23,17 @@
                         style="background:linear-gradient(to bottom, #f2a08d, #e81123); color:white;">X</button>
                 </div>
             </div>
-            <div style="padding: 20px; text-align: center; font-size: 12px;" id="modalErroTexto"></div>
+            <div style="padding: 20px; text-align: center; font-size: 12px; white-space: pre-line;" id="modalErroTexto">
+            </div>
             <div style="padding: 10px; text-align: center;">
                 <button onclick="fecharModalErro()">OK</button>
             </div>
         </div>
     </div>
 
-    <div id="modalConfirmaOverlay" class="overlay" style="z-index: 15000;">
-        <div style="width: 90%; max-width: 300px; background: #ECE9D8; border: 1px solid #003399;">
+    <!-- Modal de confirmação -->
+    <div id="modalConfirmaOverlay" class="overlay">
+        <div class="modal-box" style="width: 90%; max-width: 300px; background: #ECE9D8; border: 1px solid #003399;">
             <div class="title-bar">
                 <span id="confirmaTitulo">Confirmar</span>
                 <div class="title-bar-controls">
@@ -50,8 +50,90 @@
         </div>
     </div>
 
+    <!-- Modal: novo tipo -->
+    <div id="modalNovoTipoOverlay" class="overlay">
+        <div class="modal-box" style="width: 90%; max-width: 340px; background: #ECE9D8; border: 1px solid #003399;">
+            <div class="title-bar">
+                <span>Criar tipo de documento</span>
+                <div class="title-bar-controls">
+                    <button onclick="fecharModalNovoTipo()"
+                        style="background:linear-gradient(to bottom, #f2a08d, #e81123); color:white;">X</button>
+                </div>
+            </div>
+            <div style="padding: 15px;">
+                <label>Nome do tipo:</label>
+                <input type="text" id="novoTipoNomeInput" placeholder="Ex: licenca-premio"
+                    style="width:100%; margin-top:5px; box-sizing:border-box;">
+                <div style="margin-top:14px; text-align:center; display:flex; gap:8px; justify-content:center;">
+                    <button onclick="confirmarNovoTipo()">Confirmar</button>
+                    <button onclick="fecharModalNovoTipo()">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: backup -->
+    <div id="modalBackupOverlay" class="overlay">
+        <div class="modal-box" style="width: 90%; max-width: 480px; background: #ECE9D8; border: 1px solid #003399;">
+            <div class="title-bar">
+                <span>Backup</span>
+                <div class="title-bar-controls">
+                    <button onclick="fecharModalBackup()"
+                        style="background:linear-gradient(to bottom, #f2a08d, #e81123); color:white;">X</button>
+                </div>
+            </div>
+            <div style="padding: 15px;">
+
+                <div style="margin-bottom: 12px;">
+                    <div style="font-weight:bold; color:#003399; margin-bottom:5px;">Salvamento automático</div>
+                    <p style="margin:0 0 8px 0; font-size: 10px; color:#555; line-height:1.4;">
+                        O sistema salva automaticamente no <b>armazenamento local do navegador</b>
+                        a cada alteração. Ao abrir o app novamente, tudo é carregado de lá.
+                        Use os botões abaixo para exportar/importar cópias em arquivo <code>.json</code>
+                        como backup externo.
+                    </p>
+                </div>
+
+                <hr style="border:none; border-top:1px solid #ACA899; margin:12px 0;">
+
+                <div style="margin-bottom: 12px;">
+                    <div style="font-weight:bold; color:#003399; margin-bottom:5px;">Registros (registros.json)</div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button onclick="exportarRegistrosManual()">📤 Salvar registros.json</button>
+                        <label class="config-btn-file">
+                            📥 Carregar registros.json
+                            <input type="file" accept=".json,.txt" onchange="importarRegistrosManual(this)"
+                                style="display:none">
+                        </label>
+                    </div>
+                </div>
+
+                <hr style="border:none; border-top:1px solid #ACA899; margin:12px 0;">
+
+                <div style="margin-bottom: 12px;">
+                    <div style="font-weight:bold; color:#003399; margin-bottom:5px;">Tipos (tipos.json)</div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button onclick="exportarTiposManual()">📤 Salvar tipos.json</button>
+                        <label class="config-btn-file">
+                            📥 Carregar tipos.json
+                            <input type="file" accept=".json,.txt" onchange="importarTiposManual(this)"
+                                style="display:none">
+                        </label>
+                    </div>
+                </div>
+
+                <hr style="border:none; border-top:1px solid #ACA899; margin:12px 0;">
+
+                <div style="text-align:center;">
+                    <button onclick="fecharModalBackup()">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de nota -->
     <div id="modalNotaOverlay" class="overlay">
-        <div style="width: 95%; max-width: 550px; background: #ECE9D8; border: 1px solid #003399;">
+        <div class="modal-box" style="width: 95%; max-width: 550px; background: #ECE9D8; border: 1px solid #003399;">
             <div class="title-bar">
                 <span id="notaTitulo">Bloco de Notas</span>
                 <div class="title-bar-controls">
@@ -81,19 +163,20 @@
         </div>
     </div>
 
+    <!-- Modal de pesquisa -->
     <div id="modalPesquisaOverlay" class="overlay">
-        <div style="width: 90%; max-width: 450px; background: #ECE9D8; border: 1px solid #003399;">
+        <div class="modal-box" style="width: 90%; max-width: 450px; background: #ECE9D8; border: 1px solid #003399;">
             <div class="title-bar">
-                <span>Pesquisar Processo / Matrícula</span>
+                <span>Pesquisar</span>
                 <div class="title-bar-controls">
                     <button style="background:linear-gradient(to bottom, #f2a08d, #e81123); color:white;"
                         onclick="fecharPesquisa()">X</button>
                 </div>
             </div>
             <div style="padding: 15px;">
-                <label>Digite o número do processo ou matrícula (ex: 01234567 ou 1234567X):</label>
-                <input type="text" id="inputBusca" placeholder="Processo ou matrícula" style="margin-top:5px;">
-                <button onclick="executarPesquisa()" style="width: 100%; margin-top: 5px;">Localizar</button>
+                <input type="text" id="inputBusca"
+                    placeholder="Digite a matrícula ou número / identificação do documento" style="margin-top:5px;">
+                <button onclick="executarPesquisa()" style="width: 100%; margin-top: 8px;">Localizar</button>
                 <div id="resultadoBusca"
                     style="margin-top: 15px; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #7F9DB9; padding: 5px; display: none;">
                 </div>
@@ -101,8 +184,9 @@
         </div>
     </div>
 
+    <!-- Modal de checklist -->
     <div id="modalChecklistOverlay" class="overlay">
-        <div class="modal-checklist-container">
+        <div class="modal-box modal-checklist-container">
             <div class="title-bar">
                 <span id="checklistTitulo">Checklist de Documentos</span>
                 <div class="title-bar-controls">
@@ -110,7 +194,45 @@
                         style="background:linear-gradient(to bottom, #f2a08d, #e81123); color:white;">X</button>
                 </div>
             </div>
-            <div class="modal-checklist-body" id="checklistBody">
+            <div class="modal-checklist-body" id="checklistBody"></div>
+        </div>
+    </div>
+
+    <!-- Modal de configuração -->
+    <div id="modalConfigOverlay" class="overlay">
+        <div class="modal-box modal-config-container">
+            <div class="title-bar">
+                <span>Configurações - Tipos de documentos</span>
+                <div class="title-bar-controls">
+                    <button onclick="fecharConfig()"
+                        style="background:linear-gradient(to bottom, #f2a08d, #e81123); color:white;">X</button>
+                </div>
+            </div>
+            <div class="modal-config-body">
+                <div class="config-painel-esquerdo">
+                    <div class="config-painel-titulo">Tipos de documentos</div>
+                    <div id="configListaTipos" class="config-lista-tipos"></div>
+                    <div class="config-painel-botoes-vertical">
+                        <button onclick="abrirModalNovoTipo()" title="Criar um novo tipo de documento">➕ Criar tipo
+                            documento</button>
+                        <button onclick="removerTipoConfig()" title="Excluir o tipo selecionado">🗑️ Excluir
+                            tipo</button>
+                    </div>
+                </div>
+                <div class="config-painel-direito">
+                    <div class="config-painel-titulo">
+                        Itens do tipo:&nbsp;<span id="configTipoNomeAtual"
+                            class="config-tipo-nome-atual">(nenhum)</span>
+                    </div>
+                    <div id="configListaItens" class="config-lista-itens"></div>
+                    <div class="config-painel-botoes">
+                        <button onclick="adicionarItemConfig()" class="config-btn-metade">➕ Adicionar Item</button>
+                        <button id="configBtnSalvarTipo" onclick="salvarTipoConfigAtual()" class="config-btn-metade"
+                            disabled>💾 Salvar</button>
+                        <button id="configBtnCancelarTipo" onclick="cancelarTipoConfigAtual()" class="config-btn-metade"
+                            style="display:none;">❌ Cancelar</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -119,13 +241,9 @@
         <div class="title-bar">
             <span>Registro Diário de Processos.exe</span>
             <div class="title-bar-controls">
-                <button onclick="window.open('#')" disabled>✨</button>
-                <button onclick="window.open('#')" disabled>🧙‍♂️</button>
-                <button onclick="window.open('#')" disabled>📜</button>
-                <button onclick="window.open('#')" disabled><i class="fa fa-info" aria-hidden="true"></i></button>
-                <button onclick="window.open('#')" disabled>❓</button>
-                <button onclick="carregarFraseClippy()">💬</button>
-                <button onclick="abrirPesquisa()">🔍</button>
+                <button onclick="abrirModalBackup()" title="Backup">📁</button>
+                <button onclick="abrirConfig()" title="Configurações">⚙️</button>
+                <button onclick="abrirPesquisa()" title="Pesquisar">🔍</button>
                 <button style="background:linear-gradient(to bottom, #f2a08d, #e81123); color:white;">X</button>
             </div>
         </div>
@@ -134,36 +252,27 @@
             <div class="esquerda">
                 <fieldset>
                     <legend>Novo Registro</legend>
-                    <label>Processo</label><input type="text" id="processo" placeholder="00000-00000000/0000-00">
-                    <label>Tipo</label>
+                    <label>Número do documento</label>
+                    <input type="text" id="processo" placeholder="Digite o número ou identificação do documento">
+
+                    <label>Tipo do documento</label>
                     <select id="tipo">
-                        <option value="abono">abono</option>
-                        <option value="aposentadoria">aposentadoria</option>
-                        <option value="invalidez">invalidez</option>
-                        <option value="registros">registros</option>
-                        <option value="outros">outros</option>
+                        <option value="" selected disabled>Selecione o tipo...</option>
                     </select>
-                    <div style="margin-bottom:10px;">
-                        <label><input type="radio" name="fluxo" value="novo" checked> novo</label>
+
+                    <div style="margin-bottom:10px; margin-top:8px;">
+                        <label><input type="radio" name="fluxo" value="novo"> novo</label>
                         <label style="margin-left:10px;"><input type="radio" name="fluxo" value="atualizacao">
                             atualização</label>
                         <label style="margin-left:10px;"><input type="radio" name="fluxo" value="retorno">
                             retorno</label>
                     </div>
-                    <button id="btnAdicionar" onclick="adicionarRegistro()">Adicionar</button>
+                    <button id="btnAdicionar" onclick="adicionarRegistro()" disabled>Adicionar</button>
                 </fieldset>
 
                 <fieldset>
                     <legend>Calendário</legend>
                     <div class="calendario" id="calendario"></div>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-top:10px;">
-                        <button onclick="forcarSalvar()" style="grid-column: span 2;">💾 Salvar no navegador</button>
-                        <button onclick="gerarBackup()">Backup TXT</button>
-                        <label
-                            style="background: linear-gradient(to bottom, #ffffff 0%, #ebebe4 45%, #d1d1c9 50%, #ebebe4 100%); border:1px solid #003c74; padding:4px; text-align:center; border-radius:3px; cursor:pointer">
-                            Carregar <input type="file" onchange="carregarBackup(this)" style="display:none">
-                        </label>
-                    </div>
                 </fieldset>
             </div>
 

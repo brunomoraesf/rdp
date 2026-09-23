@@ -1,11 +1,9 @@
-
 /* ---------- DADOS GLOBAIS ---------- */
 var dados = {};
 var hoje = new Date();
 var diaAtual = hoje.toISOString().slice(0, 10);
 var diaSelecionado = diaAtual;
 var timerStatus;
-const TOTAL_CHECKLIST_ITENS = 39; // número real de linhas do checklist
 var indiceNotaAtual = null;
 var conteudoOriginal = "";
 var dataChecklistAtual = null;
@@ -13,9 +11,135 @@ var indiceChecklistAtual = null;
 var checklistAlterado = false;
 var isHighlightActive = false;
 
-/* NOVAS VARIÁVEIS PARA PESQUISA SEM RESULTADO */
 var ultimoTermoPesquisa = "";
 var nenhumResultadoPesquisa = false;
+
+/* ---------- TIPOS CONFIGURÁVEIS ---------- */
+var tiposConfig = {};
+var tipoConfigSelecionado = null;
+var tipoConfigPendenteNome = null;
+var ordemTipos = [];
+
+function tiposPadraoNomes() {
+    return ["abono", "aposentadoria", "invalidez", "registros", "outros"];
+}
+
+function sanitizarTiposConfig(obj) {
+    if (!obj || typeof obj !== 'object') return {};
+    var out = {};
+    Object.keys(obj).forEach(function (t) {
+        var entry = obj[t];
+        if (!entry || typeof entry !== 'object') entry = {};
+        var itens = Array.isArray(entry.itens) ? entry.itens : [];
+        itens = itens.map(function (s) { return String(s); });
+        out[t] = { itens: itens };
+    });
+    return out;
+}
+
+function salvarOrdemTipos() {
+    localStorage.setItem('ordem_tipos', JSON.stringify(ordemTipos));
+}
+
+function carregarOrdemTipos() {
+    var raw = null;
+    try { raw = JSON.parse(localStorage.getItem('ordem_tipos') || 'null'); } catch (e) { raw = null; }
+    ordemTipos = Array.isArray(raw) ? raw.filter(function (t) { return typeof t === 'string'; }) : [];
+    Object.keys(tiposConfig).forEach(function (t) {
+        if (ordemTipos.indexOf(t) === -1) ordemTipos.push(t);
+    });
+    ordemTipos = ordemTipos.filter(function (t) { return !!tiposConfig[t]; });
+    localStorage.setItem('ordem_tipos', JSON.stringify(ordemTipos));
+}
+
+function inicializarTiposConfig() {
+    var salvo = null;
+    try { salvo = JSON.parse(localStorage.getItem('tipos_config') || 'null'); } catch (e) { salvo = null; }
+    tiposConfig = sanitizarTiposConfig(salvo);
+    if (Object.keys(tiposConfig).length === 0) {
+        tiposPadraoNomes().forEach(function (t) { tiposConfig[t] = { itens: [] }; });
+        localStorage.setItem('tipos_config', JSON.stringify(tiposConfig));
+    }
+    carregarOrdemTipos();
+}
+
+function salvarTiposConfig() {
+    localStorage.setItem('tipos_config', JSON.stringify(tiposConfig));
+}
+
+function popularSelectTipos() {
+    var sel = document.getElementById('tipo');
+    if (!sel) return;
+    var valorAtual = sel.value;
+    sel.innerHTML = '';
+    var opt0 = document.createElement('option');
+    opt0.value = '';
+    opt0.textContent = 'Selecione o tipo...';
+    opt0.disabled = true;
+    sel.appendChild(opt0);
+    ordemTipos.forEach(function (t) {
+        if (!tiposConfig[t]) return;
+        var opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        sel.appendChild(opt);
+    });
+    if (valorAtual && tiposConfig[valorAtual]) sel.value = valorAtual;
+    else sel.value = '';
+    atualizarBotaoAdicionar();
+}
+
+function atualizarBotaoAdicionar() {
+    var btn = document.getElementById('btnAdicionar');
+    var sel = document.getElementById('tipo');
+    if (!btn || !sel) return;
+    var tipoOk = sel.value && tiposConfig[sel.value];
+    var fluxoOk = !!document.querySelector('input[name=fluxo]:checked');
+    btn.disabled = (diaSelecionado !== diaAtual) || !tipoOk || !fluxoOk;
+}
+
+function getItensDoTipo(nomeTipo) {
+    if (tiposConfig[nomeTipo] && Array.isArray(tiposConfig[nomeTipo].itens)) {
+        return tiposConfig[nomeTipo].itens.slice();
+    }
+    return [];
+}
+
+/* ---------- BUSCA INTELIGENTE ---------- */
+function normalizarBuscaInteligente(str) {
+    if (!str) return "";
+    var s = String(str).toUpperCase().replace(/[^0-9A-Z]/g, '');
+    var semZeros = s.replace(/^0+/, '');
+    return semZeros.length > 0 ? semZeros : s;
+}
+function correspondeBusca(haystack, needle) {
+    var h = normalizarBuscaInteligente(haystack);
+    var n = normalizarBuscaInteligente(needle);
+    if (!n) return false;
+    return h === n || h.indexOf(n) !== -1;
+}
+
+/* ---------- VALIDADORES (fallback para arquivos no formato antigo) ---------- */
+function pareceRegistros(obj) {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+    var chaves = Object.keys(obj);
+    if (chaves.length === 0) return true;
+    for (var i = 0; i < chaves.length; i++) {
+        var k = chaves[i];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(k) && Array.isArray(obj[k])) return true;
+    }
+    return false;
+}
+function pareceTipos(obj) {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+    var chaves = Object.keys(obj);
+    if (chaves.length === 0) return true;
+    for (var i = 0; i < chaves.length; i++) {
+        var v = obj[chaves[i]];
+        if (v && typeof v === 'object' && Array.isArray(v.itens)) return true;
+    }
+    return false;
+}
 
 /* ---------- CLIPPY ---------- */
 const imagensClippy = [
@@ -24,11 +148,11 @@ const imagensClippy = [
     'imagens/clippy-11.gif', 'imagens/clippy-12.gif', 'imagens/clippy-13.gif', 'imagens/clippy-14.gif',
     'imagens/clippy-16.gif', 'imagens/clippy-17.gif'
 ];
-function trocarClippy() { const img = document.getElementById('clippy-img'); img.src = imagensClippy[Math.floor(Math.random() * imagensClippy.length)]; }
+function trocarClippy() { const img = document.getElementById('clippy-img'); if (img) img.src = imagensClippy[Math.floor(Math.random() * imagensClippy.length)]; }
 setInterval(trocarClippy, 10000);
 function mostrarStatus(texto) { var pop = document.getElementById('statusPopup'); pop.innerHTML = "💾 <b>Status:</b><br>" + texto; pop.style.display = 'block'; if (timerStatus) clearTimeout(timerStatus); timerStatus = setTimeout(() => { pop.style.display = 'none'; }, 5000); }
-function mostrarErroModal(texto) { document.getElementById('modalErroTexto').innerText = texto; document.getElementById('modalErroOverlay').style.display = 'flex'; }
-function fecharModalErro() { document.getElementById('modalErroOverlay').style.display = 'none'; }
+function mostrarErroModal(texto) { document.getElementById('modalErroTexto').innerText = texto; abrirOverlay('modalErroOverlay'); }
+function fecharModalErro() { fecharOverlay('modalErroOverlay'); }
 
 /* ---------- AUXILIARES ---------- */
 function format(cmd, val) { document.getElementById('notaEditable').focus(); document.execCommand(cmd, false, val); }
@@ -44,15 +168,270 @@ function abrirConfirma(titulo, texto, acaoSim, acaoNao, acaoCancelar) {
     document.getElementById('btnConfirmaSim').onclick = () => { if (confirmaCallbackSim) confirmaCallbackSim(); fecharConfirma(); };
     document.getElementById('btnConfirmaNao').onclick = () => { if (confirmaCallbackNao) confirmaCallbackNao(); fecharConfirma(); };
     document.getElementById('btnConfirmaCancelar').onclick = () => { if (confirmaCallbackCancelar) confirmaCallbackCancelar(); fecharConfirma(); };
-    document.getElementById('modalConfirmaOverlay').style.display = 'flex';
+    abrirOverlay('modalConfirmaOverlay');
 }
-function fecharConfirma() { document.getElementById('modalConfirmaOverlay').style.display = 'none'; confirmaCallbackSim = null; confirmaCallbackNao = null; confirmaCallbackCancelar = null; }
+function fecharConfirma() { fecharOverlay('modalConfirmaOverlay'); confirmaCallbackSim = null; confirmaCallbackNao = null; confirmaCallbackCancelar = null; }
 
-function salvarNavegador() { localStorage.setItem('registros_processos', JSON.stringify(dados)); }
-function forcarSalvar() { salvarNavegador(); mostrarStatus("Dados salvos manualmente!"); }
-function gerarBackup() { var dataStr = new Date(); var dia = String(dataStr.getDate()).padStart(2, '0'); var mes = String(dataStr.getMonth() + 1).padStart(2, '0'); var ano = dataStr.getFullYear(); var dataFormatada = dia + mes + ano; var blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'text/plain' }); var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup-rdp-' + dataFormatada + '.txt'; a.click(); mostrarStatus("Backup exportado com sucesso."); }
-function carregarBackup(input) { if (!input.files[0]) return; var reader = new FileReader(); reader.onload = function (e) { try { var novosDados = JSON.parse(e.target.result); dados = novosDados; localStorage.setItem('registros_processos', JSON.stringify(dados)); diaSelecionado = diaAtual; renderizar(); mostrarStatus("Backup carregado e sincronizado!"); input.value = ""; } catch (err) { mostrarErroModal("Arquivo JSON inválido ou corrompido."); } }; reader.readAsText(input.files[0]); }
+/* ============================================================ */
+/* ========== GERENCIADOR DE MODAIS =========================== */
+/* ============================================================ */
+var zIndexCounter = 15000;
 
+function getModalBox(overlay) {
+    var box = overlay.querySelector('.modal-box');
+    if (box) return box;
+    for (var i = 0; i < overlay.children.length; i++) {
+        if (overlay.children[i].tagName === 'DIV') return overlay.children[i];
+    }
+    return null;
+}
+function trazerParaFrente(overlay) { zIndexCounter++; overlay.style.zIndex = zIndexCounter; }
+function resetarPosicaoModal(overlay) {
+    var box = getModalBox(overlay);
+    if (!box) return;
+    box.style.position = ''; box.style.left = ''; box.style.top = '';
+    box.style.margin = ''; box.style.transform = '';
+    box.style.right = ''; box.style.bottom = '';
+}
+function abrirOverlay(id) {
+    var overlay = document.getElementById(id);
+    if (!overlay) return;
+    resetarPosicaoModal(overlay);
+    overlay.style.display = 'flex';
+    trazerParaFrente(overlay);
+}
+function fecharOverlay(id) {
+    var overlay = document.getElementById(id);
+    if (!overlay) return;
+    overlay.style.display = 'none';
+    resetarPosicaoModal(overlay);
+}
+function clampPosicao(box, left, top) {
+    var w = box.offsetWidth, h = box.offsetHeight;
+    var maxLeft = Math.max(0, window.innerWidth - w);
+    var maxTop = Math.max(0, window.innerHeight - h);
+    if (left < 0) left = 0;
+    if (top < 0) top = 0;
+    if (left > maxLeft) left = maxLeft;
+    if (top > maxTop) top = maxTop;
+    return { left: left, top: top };
+}
+function habilitarArrastoModal(overlay) {
+    var box = getModalBox(overlay);
+    if (!box) return;
+    var titleBar = box.querySelector('.title-bar');
+    if (!titleBar) return;
+    if (titleBar.__dragBound) return;
+    titleBar.__dragBound = true;
+    titleBar.style.cursor = 'move';
+    titleBar.style.userSelect = 'none';
+
+    var dragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+
+    titleBar.addEventListener('mousedown', function (e) {
+        var t = e.target;
+        while (t && t !== titleBar) {
+            if (t.tagName === 'BUTTON') return;
+            t = t.parentElement;
+        }
+        var rect = box.getBoundingClientRect();
+        box.style.position = 'fixed';
+        box.style.margin = '0';
+        box.style.transform = 'none';
+        var pos = clampPosicao(box, rect.left, rect.top);
+        box.style.left = pos.left + 'px';
+        box.style.top = pos.top + 'px';
+        dragging = true;
+        startX = e.clientX; startY = e.clientY;
+        startLeft = pos.left; startTop = pos.top;
+        e.preventDefault();
+    });
+    document.addEventListener('mousemove', function (e) {
+        if (!dragging) return;
+        var dx = e.clientX - startX, dy = e.clientY - startY;
+        var pos = clampPosicao(box, startLeft + dx, startTop + dy);
+        box.style.left = pos.left + 'px';
+        box.style.top = pos.top + 'px';
+    });
+    document.addEventListener('mouseup', function () { dragging = false; });
+    box.addEventListener('mousedown', function () { trazerParaFrente(overlay); });
+}
+function inicializarModais() {
+    document.querySelectorAll('.overlay').forEach(function (ov) { habilitarArrastoModal(ov); });
+}
+
+/* ---------- PERSISTÊNCIA (somente localStorage) ---------- */
+function salvarNavegador() {
+    localStorage.setItem('registros_processos', JSON.stringify(dados));
+}
+function salvarTudoNoNavegador() {
+    localStorage.setItem('registros_processos', JSON.stringify(dados));
+    localStorage.setItem('tipos_config', JSON.stringify(tiposConfig));
+    localStorage.setItem('ordem_tipos', JSON.stringify(ordemTipos));
+}
+
+function gerarTimestampArquivo() {
+    var d = new Date();
+    var ano = d.getFullYear();
+    var mes = String(d.getMonth() + 1).padStart(2, '0');
+    var dia = String(d.getDate()).padStart(2, '0');
+    var hh = String(d.getHours()).padStart(2, '0');
+    var mm = String(d.getMinutes()).padStart(2, '0');
+    var ss = String(d.getSeconds()).padStart(2, '0');
+    return '' + ano + mes + dia + '-' + hh + mm + ss;
+}
+
+function baixarJson(obj, nomeArquivo) {
+    try {
+        var blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = nomeArquivo;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+    } catch (e) {
+        console.warn('Falha ao baixar arquivo:', e);
+    }
+}
+
+// Garante que o localStorage está atualizado ao fechar
+window.addEventListener('beforeunload', function () {
+    try { salvarTudoNoNavegador(); } catch (e) { }
+});
+
+/* ---------- BACKUP MANUAL (modal) ---------- */
+function abrirModalBackup() { abrirOverlay('modalBackupOverlay'); }
+function fecharModalBackup() { fecharOverlay('modalBackupOverlay'); }
+
+function exportarRegistrosManual() {
+    var ts = gerarTimestampArquivo();
+    var pacote = {
+        _tipo_arquivo: "registros",
+        _versao: 1,
+        _geradoEm: new Date().toISOString(),
+        dados: dados
+    };
+    baixarJson(pacote, 'registros-' + ts + '.json');
+    mostrarStatus("registros.json exportado.");
+}
+
+function exportarTiposManual() {
+    var ts = gerarTimestampArquivo();
+    var pacote = {
+        _tipo_arquivo: "tipos",
+        _versao: 1,
+        _geradoEm: new Date().toISOString(),
+        dados: tiposConfig
+    };
+    baixarJson(pacote, 'tipos-' + ts + '.json');
+    mostrarStatus("tipos.json exportado.");
+}
+
+function importarRegistrosManual(input) {
+    if (!input.files[0]) return;
+    var arquivo = input.files[0];
+    var reader = new FileReader();
+    reader.onload = function (e) {
+        try {
+            var json = JSON.parse(e.target.result);
+
+            // Formato novo (com cabeçalho _tipo_arquivo)
+            if (json && typeof json === 'object' && json._tipo_arquivo !== undefined) {
+                if (json._tipo_arquivo !== 'registros') {
+                    mostrarErroModal(
+                        "Arquivo incorreto.\n\n" +
+                        "Esperado: registros\n" +
+                        "Recebido: " + json._tipo_arquivo + "\n\n" +
+                        "Use o botão 'Carregar tipos.json' para esse arquivo."
+                    );
+                    input.value = "";
+                    return;
+                }
+                dados = (json.dados && typeof json.dados === 'object') ? json.dados : {};
+            } else {
+                // Formato antigo (JSON puro, sem cabeçalho)
+                if (!pareceRegistros(json)) {
+                    mostrarErroModal(
+                        "Este arquivo não parece ser de registros.\n\n" +
+                        "Você tentou carregar um arquivo de TIPOS no campo de REGISTROS?\n\n" +
+                        "Arquivo: " + arquivo.name
+                    );
+                    input.value = "";
+                    return;
+                }
+                dados = json;
+            }
+
+            localStorage.setItem('registros_processos', JSON.stringify(dados));
+            renderizar();
+            mostrarStatus("registros.json carregado.");
+        } catch (err) {
+            mostrarErroModal("Arquivo JSON inválido ou corrompido.");
+        }
+        input.value = "";
+    };
+    reader.readAsText(arquivo);
+}
+
+function importarTiposManual(input) {
+    if (!input.files[0]) return;
+    var arquivo = input.files[0];
+    var reader = new FileReader();
+    reader.onload = function (e) {
+        try {
+            var json = JSON.parse(e.target.result);
+            var base;
+
+            // Formato novo
+            if (json && typeof json === 'object' && json._tipo_arquivo !== undefined) {
+                if (json._tipo_arquivo !== 'tipos') {
+                    mostrarErroModal(
+                        "Arquivo incorreto.\n\n" +
+                        "Esperado: tipos\n" +
+                        "Recebido: " + json._tipo_arquivo + "\n\n" +
+                        "Use o botão 'Carregar registros.json' para esse arquivo."
+                    );
+                    input.value = "";
+                    return;
+                }
+                base = (json.dados && typeof json.dados === 'object') ? json.dados : {};
+            } else {
+                // Formato antigo
+                if (!pareceTipos(json)) {
+                    mostrarErroModal(
+                        "Este arquivo não parece ser de tipos.\n\n" +
+                        "Você tentou carregar um arquivo de REGISTROS no campo de TIPOS?\n\n" +
+                        "Arquivo: " + arquivo.name
+                    );
+                    input.value = "";
+                    return;
+                }
+                base = json;
+            }
+
+            var sanit = sanitizarTiposConfig(base);
+            if (Object.keys(sanit).length === 0) {
+                tiposPadraoNomes().forEach(function (t) { sanit[t] = { itens: [] }; });
+            }
+            tiposConfig = sanit;
+            salvarTiposConfig();
+            carregarOrdemTipos();
+            popularSelectTipos();
+            tipoConfigSelecionado = ordemTipos[0] || null;
+            renderizarConfig();
+            mostrarStatus("tipos.json carregado.");
+        } catch (err) {
+            mostrarErroModal("Arquivo JSON inválido ou corrompido.");
+        }
+        input.value = "";
+    };
+    reader.readAsText(arquivo);
+}
+
+/* ---------- MATRÍCULA / COR DO ÍCONE ---------- */
 function normalizarMatricula(valor) {
     if (!valor) return "";
     let str = valor.toUpperCase().replace(/[^0-9X]/g, '');
@@ -67,38 +446,26 @@ function normalizarMatricula(valor) {
     }
 }
 
-/* ---------- COR DO ÍCONE - REGRAS CORRIGIDAS COM OR (✔️ OU ⛔) PRIORIDADE SOBRE ❌ ---------- */
 function getChecklistIconColor(checklist) {
     if (!checklist) return "black";
     const checks = checklist.checks || [];
     const xmarks = checklist.xmarks || [];
     const nas = checklist.nas || [];
-
-    let hasFalse = false;
-    let allLinesHaveResult = true;
-    let hasAtLeastOneTrue = false;
-
-    for (let i = 0; i < TOTAL_CHECKLIST_ITENS; i++) {
+    const total = Math.max(checks.length, xmarks.length, nas.length);
+    let hasFalse = false, allLinesHaveResult = total > 0, hasAtLeastOneTrue = false;
+    for (let i = 0; i < total; i++) {
         const hasCheckOrNa = checks[i] || nas[i];
         const hasXmark = xmarks[i];
-
-        if (hasCheckOrNa) {
-            hasAtLeastOneTrue = true;
-        } else if (hasXmark) {
-            hasFalse = true;
-        } else {
-            allLinesHaveResult = false;
-        }
+        if (hasCheckOrNa) hasAtLeastOneTrue = true;
+        else if (hasXmark) hasFalse = true;
+        else allLinesHaveResult = false;
     }
-
     if (hasFalse) return "red";
     if (allLinesHaveResult && hasAtLeastOneTrue) return "green";
     if ((hasAtLeastOneTrue || hasFalse) && !allLinesHaveResult) return "gold";
-
     const nomeOk = checklist.nome && checklist.nome.trim() !== "";
     const matOk = checklist.matricula && checklist.matricula.trim() !== "";
     const carOk = checklist.carreira && checklist.carreira.trim() !== "";
-
     if (nomeOk && matOk && carOk) return "#555555";
     return "black";
 }
@@ -106,7 +473,7 @@ function getChecklistIconColor(checklist) {
 /* ---------- RENDERIZAÇÃO ---------- */
 function renderizar() {
     document.getElementById('tituloDia').innerText = 'Data: ' + diaSelecionado;
-    document.getElementById('btnAdicionar').disabled = (diaSelecionado !== diaAtual);
+    atualizarBotaoAdicionar();
     var lista = document.getElementById('listaRegistros');
     lista.innerHTML = '';
     var registros = dados[diaSelecionado] || [];
@@ -182,46 +549,53 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('click', e => { if (e.target.classList.contains('numero-processo')) { navigator.clipboard.writeText(e.target.dataset.proc); mostrarStatus("Número copiado."); } });
 
-function abrirModalNota(index) { indiceNotaAtual = index; var reg = dados[diaSelecionado][index]; conteudoOriginal = reg.nota || ""; document.getElementById('notaTitulo').innerText = "Bloco de Notas - " + reg.processo; document.getElementById('notaEditable').innerHTML = conteudoOriginal; document.getElementById('modalNotaOverlay').style.display = 'flex'; }
-function tentarSalvarNota() { abrirConfirma("Salvar", "Deseja sobrescrever a nota?", () => { dados[diaSelecionado][indiceNotaAtual].nota = document.getElementById('notaEditable').innerHTML; salvarNavegador(); renderizar(); document.getElementById('modalNotaOverlay').style.display = 'none'; mostrarStatus("Nota salva."); }); }
-function tentarFecharNota() { let atual = document.getElementById('notaEditable').innerHTML; if (atual !== conteudoOriginal) abrirConfirma("Aviso", "Sair sem salvar?", () => { document.getElementById('modalNotaOverlay').style.display = 'none'; mostrarStatus("Edição cancelada."); }); else document.getElementById('modalNotaOverlay').style.display = 'none'; }
+function abrirModalNota(index) { indiceNotaAtual = index; var reg = dados[diaSelecionado][index]; conteudoOriginal = reg.nota || ""; document.getElementById('notaTitulo').innerText = "Bloco de Notas - " + reg.processo; document.getElementById('notaEditable').innerHTML = conteudoOriginal; abrirOverlay('modalNotaOverlay'); }
+function tentarSalvarNota() { abrirConfirma("Salvar", "Deseja sobrescrever a nota?", () => { dados[diaSelecionado][indiceNotaAtual].nota = document.getElementById('notaEditable').innerHTML; salvarNavegador(); renderizar(); fecharOverlay('modalNotaOverlay'); mostrarStatus("Nota salva."); }); }
+function tentarFecharNota() { let atual = document.getElementById('notaEditable').innerHTML; if (atual !== conteudoOriginal) abrirConfirma("Aviso", "Sair sem salvar?", () => { fecharOverlay('modalNotaOverlay'); mostrarStatus("Edição cancelada."); }); else fecharOverlay('modalNotaOverlay'); }
 function limparConteudo() { abrirConfirma("Limpar", "Apagar tudo?", () => { document.getElementById('notaEditable').innerHTML = ""; mostrarStatus("Conteúdo limpo."); }); }
 
 /* ---------- MODAL CHECKLIST ---------- */
 function abrirModalChecklist(data, indice) {
-    const container = document.querySelector('#modalChecklistOverlay .modal-checklist-container');
-    if (container) { container.style.position = ''; container.style.left = ''; container.style.top = ''; container.style.margin = ''; }
     dataChecklistAtual = data;
     indiceChecklistAtual = indice;
     const registro = dados[data][indice];
     if (!registro.checklist) {
+        var itensDoTipo = getItensDoTipo(registro.tipo);
         registro.checklist = {
             nome: "", matricula: "", carreira: "", processo: registro.processo,
-            checks: new Array(TOTAL_CHECKLIST_ITENS).fill(false),
-            xmarks: new Array(TOTAL_CHECKLIST_ITENS).fill(false),
-            nas: new Array(TOTAL_CHECKLIST_ITENS).fill(false),
-            revisoes: new Array(TOTAL_CHECKLIST_ITENS).fill(false),
+            itens: itensDoTipo.slice(),
+            checks: new Array(itensDoTipo.length).fill(false),
+            xmarks: new Array(itensDoTipo.length).fill(false),
+            nas: new Array(itensDoTipo.length).fill(false),
+            revisoes: new Array(itensDoTipo.length).fill(false),
             observacao: "",
             versao: 1,
             data: new Date().toISOString()
         };
+    } else if (!Array.isArray(registro.checklist.itens)) {
+        var len = (registro.checklist.checks || []).length || 0;
+        var itens = [];
+        for (var k = 0; k < len; k++) itens.push("");
+        registro.checklist.itens = itens;
     }
     carregarChecklistNoModal(registro.checklist);
-    document.getElementById('modalChecklistOverlay').style.display = 'flex';
     document.getElementById('checklistTitulo').innerHTML = `Checklist - ${registro.processo}`;
+    abrirOverlay('modalChecklistOverlay');
     checklistAlterado = false;
 }
 
 function limparChecklistAtual() {
-    abrirConfirma("Limpar Checklist", "Deseja limpar todos os campos (nome, matrícula, carreira, observação e todos os checkboxes)?", () => {
+    abrirConfirma("Limpar Checklist", "Deseja limpar todos os campos?", () => {
         const registro = dados[dataChecklistAtual][indiceChecklistAtual];
         if (registro) {
+            var itens = (registro.checklist && registro.checklist.itens) || getItensDoTipo(registro.tipo);
             registro.checklist = {
                 nome: "", matricula: "", carreira: "", processo: registro.processo,
-                checks: new Array(TOTAL_CHECKLIST_ITENS).fill(false),
-                xmarks: new Array(TOTAL_CHECKLIST_ITENS).fill(false),
-                nas: new Array(TOTAL_CHECKLIST_ITENS).fill(false),
-                revisoes: new Array(TOTAL_CHECKLIST_ITENS).fill(false),
+                itens: itens.slice(),
+                checks: new Array(itens.length).fill(false),
+                xmarks: new Array(itens.length).fill(false),
+                nas: new Array(itens.length).fill(false),
+                revisoes: new Array(itens.length).fill(false),
                 observacao: "",
                 versao: (registro.checklist?.versao || 0) + 1,
                 data: new Date().toISOString()
@@ -238,22 +612,15 @@ function limparChecklistAtual() {
 function fecharModalChecklist() {
     if (checklistAlterado) {
         abrirConfirma("Aviso", "Há alterações não salvas. Deseja salvar antes de fechar?",
-            () => { // Sim
+            () => {
                 const salvou = salvarChecklistAtual();
-                if (salvou) {
-                    document.getElementById('modalChecklistOverlay').style.display = 'none';
-                    mostrarStatus("Checklist salvo.");
-                }
+                if (salvou) { fecharOverlay('modalChecklistOverlay'); mostrarStatus("Checklist salvo."); }
             },
-            () => { // Não
-                document.getElementById('modalChecklistOverlay').style.display = 'none';
-            },
-            () => { // Cancelar
-                // nada
-            }
+            () => { fecharOverlay('modalChecklistOverlay'); },
+            () => { }
         );
     } else {
-        document.getElementById('modalChecklistOverlay').style.display = 'none';
+        fecharOverlay('modalChecklistOverlay');
     }
 }
 
@@ -265,21 +632,22 @@ function salvarChecklistAtual() {
     const matriculaRaw = document.getElementById('check_matricula')?.value.trim() || "";
     const carreira = document.getElementById('check_carreira')?.value.trim() || "";
     const observacao = document.getElementById('observacao-checklist')?.innerHTML || "";
+    const itens = (registro.checklist && registro.checklist.itens) || getItensDoTipo(registro.tipo);
     const checks = [], xmarks = [], nas = [], revisoes = [];
-    for (let i = 0; i < TOTAL_CHECKLIST_ITENS; i++) {
+    for (let i = 0; i < itens.length; i++) {
         checks.push(!!document.getElementById(`check_chk_${i}`)?.checked);
         xmarks.push(!!document.getElementById(`check_xmark_${i}`)?.checked);
         nas.push(!!document.getElementById(`check_na_${i}`)?.checked);
         revisoes.push(!!document.getElementById(`check_revisar_${i}`)?.checked);
     }
     if (nome === "" || matriculaRaw === "" || carreira === "") {
-        mostrarStatus("Nome, Matrícula e Carreira são obrigatórios para salvar.");
         mostrarErroModal("Não foi possível salvar: Nome, Matrícula e Carreira são obrigatórios.");
         return false;
     }
     const matricula = normalizarMatricula(matriculaRaw);
     registro.checklist = {
         nome, matricula, carreira, processo: registro.processo,
+        itens: itens.slice(),
         checks, xmarks, nas, revisoes, observacao,
         versao: (registro.checklist?.versao || 0) + 1,
         data: new Date().toISOString()
@@ -293,48 +661,7 @@ function salvarChecklistAtual() {
 
 function carregarChecklistNoModal(checklist) {
     const body = document.getElementById('checklistBody');
-    const descricoes = [
-        "SIGRH - Nome Servidor",
-        "Quitação Eleitoral",
-        "Dados Eleitorais",
-        "Endereço",
-        "Telefone",
-        "E-mail",
-        "Filiação - Mãe",
-        "Filiação - Pai",
-        "Estado Civil",
-        "Nome Cônjuge",
-        "Nº Doc. Identidade",
-        "Data de Emissão Identidade",
-        "Órgão de Emissão Identidade",
-        "Identidade Modelo Novo",
-        "Identidade Modelo Outros",
-        "Carteira Motorista",
-        "Naturalidade",
-        "UF de Nascimento",
-        "Nacionalidade",
-        "Readaptado?",
-        "Último Requerimento",
-        "Cabeçalho Completo?",
-        "Nome é o Mesmo do Nome Assinado?",
-        "Na Assinatura é Carreira Concurso?",
-        "SIGRH Verde",
-        "Reestruturação",
-        "Reestrutura Carreira Certa?",
-        "Tabela de Cargos",
-        "Matrícula Tab. Carg. Certo é do Servidor?",
-        "Concurso Bate?",
-        "Estágio Probatório Tem?",
-        "Despacho Setor Certo?",
-        "Despacho Servidor Certo? (Mat. e Nome)",
-        "Termo sem Efeito",
-        "Ficha Concurso",
-        "Ficha Concurso Assinado?",
-        "Cara Crachá Ficha Concurso",
-        "Cara Crachá Ficha Cadastro",
-        "Cara Crachá Ficha Despacho"
-    ];
-
+    const itens = (checklist.itens && checklist.itens.length) ? checklist.itens : [];
     let html = `
         <div class="checklist-header-fixo">
             <label>Nome:<br><input type="text" id="check_nome" value="${escapeHtml(checklist.nome || '')}" style="width:100%"></label><br>
@@ -346,27 +673,28 @@ function carregarChecklistNoModal(checklist) {
                 <button onclick="fecharModalChecklist()">❌ Fechar</button>
             </div>
         </div>
-        <div class="checklist-tabela-rolagem">
-            <table>
-                <thead>
-                    <tr><th class="descricao">Descrição</th><th class="check">✔️</th><th class="xmark">❌</th><th class="na">⛔</th><th class="revisar">↩</th></tr>
-                </thead>
+        <div class="checklist-tabela-rolagem">`;
+    if (itens.length === 0) {
+        html += `<div style="padding: 16px; text-align: center; color: #666; font-style: italic;">
+                    Nenhum item configurado para este tipo.<br>Vá em ⚙️ Configurações para adicionar itens.
+                 </div>`;
+    } else {
+        html += `<table>
+                <thead><tr><th class="descricao">Descrição</th><th class="check">✔️</th><th class="xmark">❌</th><th class="na">⛔</th><th class="revisar">↩</th></tr></thead>
                 <tbody>`;
-
-    for (let i = 0; i < descricoes.length; i++) {
-        html += `<tr>
-            <td>${descricoes[i]}</td>
-            <td class="check"><input type="checkbox" id="check_chk_${i}" class="check" ${checklist.checks[i] ? 'checked' : ''} onchange="marcarAlterado()"></td>
-            <td class="xmark"><input type="checkbox" id="check_xmark_${i}" class="xmark" ${checklist.xmarks[i] ? 'checked' : ''} onchange="marcarAlterado()"></td>
-            <td class="na"><input type="checkbox" id="check_na_${i}" class="na" ${checklist.nas[i] ? 'checked' : ''} onchange="marcarAlterado()"></td>
-            <td class="revisar"><input type="checkbox" id="check_revisar_${i}" class="revisar" ${checklist.revisoes[i] ? 'checked' : ''} onchange="marcarAlterado()"></td>
-        </tr>`;
+        for (let i = 0; i < itens.length; i++) {
+            var texto = itens[i] && String(itens[i]).trim() !== "" ? itens[i] : "(sem nome)";
+            html += `<tr>
+                <td>${escapeHtml(texto)}</td>
+                <td class="check"><input type="checkbox" id="check_chk_${i}" class="check" ${checklist.checks[i] ? 'checked' : ''} onchange="marcarAlterado()"></td>
+                <td class="xmark"><input type="checkbox" id="check_xmark_${i}" class="xmark" ${checklist.xmarks[i] ? 'checked' : ''} onchange="marcarAlterado()"></td>
+                <td class="na"><input type="checkbox" id="check_na_${i}" class="na" ${checklist.nas[i] ? 'checked' : ''} onchange="marcarAlterado()"></td>
+                <td class="revisar"><input type="checkbox" id="check_revisar_${i}" class="revisar" ${checklist.revisoes[i] ? 'checked' : ''} onchange="marcarAlterado()"></td>
+            </tr>`;
+        }
+        html += `</tbody></table>`;
     }
-
-    html += `
-                </tbody>
-            </table>
-        </div>
+    html += `</div>
         <div class="checklist-footer-fixo">
             <div class="format-toolbar">
                 <button class="format-btn" onclick="formatChecklist('bold')"><b>N</b></button>
@@ -376,19 +704,13 @@ function carregarChecklistNoModal(checklist) {
             <div id="observacao-checklist" contenteditable="true">${checklist.observacao || ''}</div>
             <div style="margin-top:8px; font-size:10px;">Versão: ${checklist.versao || 1} | ${new Date(checklist.data).toLocaleString()}</div>
         </div>`;
-
     body.innerHTML = html;
 
-    // Adicionar eventos para detectar alterações
-    const inputs = body.querySelectorAll('input, [contenteditable]');
-    inputs.forEach(el => el.addEventListener('input', () => { checklistAlterado = true; }));
-    const chks = body.querySelectorAll('input[type="checkbox"]');
-    chks.forEach(cb => cb.addEventListener('change', () => { checklistAlterado = true; }));
+    body.querySelectorAll('input, [contenteditable]').forEach(el => el.addEventListener('input', () => { checklistAlterado = true; }));
+    body.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener('change', () => { checklistAlterado = true; }));
     const obs = document.getElementById('observacao-checklist');
     if (obs) {
         obs.addEventListener('input', () => { checklistAlterado = true; });
-
-        // Colar como texto puro (ignora fontes, cores, tamanhos externos)
         obs.addEventListener('paste', function (e) {
             e.preventDefault();
             const texto = (e.clipboardData || window.clipboardData).getData('text/plain');
@@ -401,63 +723,69 @@ function carregarChecklistNoModal(checklist) {
 function marcarAlterado() { checklistAlterado = true; }
 function formatChecklist(cmd) { const el = document.getElementById('observacao-checklist'); if (el) { el.focus(); document.execCommand(cmd, false, null); checklistAlterado = true; } }
 function toggleHighlightChecklist() { const el = document.getElementById('observacao-checklist'); if (el) { el.focus(); if (isHighlightActive) { document.execCommand('removeFormat', false, null); isHighlightActive = false; } else { document.execCommand('styleWithCSS', false, true); document.execCommand('hiliteColor', false, 'yellow'); isHighlightActive = true; } checklistAlterado = true; } }
-function escapeHtml(str) { return str.replace(/[&<>]/g, function (m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
+function escapeHtml(str) { if (str === null || str === undefined) return ''; return String(str).replace(/[&<>"]/g, function (m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; if (m === '"') return '&quot;'; return m; }); }
 
-/* ========== FUNÇÃO AUXILIAR PARA ENCONTRAR REGISTRO ANTERIOR COM MESMO PROCESSO ========== */
+/* ========== BUSCAR REGISTRO ANTERIOR ========== */
 function buscarRegistroAnteriorPorProcesso(processo) {
     let registrosAnteriores = [];
+    var procNorm = normalizarBuscaInteligente(processo);
     for (let data in dados) {
-        if (data === diaAtual) continue; // ignora o dia atual
+        if (data === diaAtual) continue;
         let registros = dados[data];
         for (let i = 0; i < registros.length; i++) {
-            if (registros[i].processo === processo) {
+            if (normalizarBuscaInteligente(registros[i].processo) === procNorm) {
                 registrosAnteriores.push({ data: data, registro: registros[i] });
             }
         }
     }
     if (registrosAnteriores.length === 0) return null;
-    // ordena pela data mais recente (maior string yyyy-mm-dd)
     registrosAnteriores.sort((a, b) => b.data.localeCompare(a.data));
     return registrosAnteriores[0].registro;
 }
 
-/* ---------- PESQUISA (modificada) ---------- */
+/* ---------- PESQUISA ---------- */
 function abrirPesquisa() {
     nenhumResultadoPesquisa = false;
     ultimoTermoPesquisa = "";
-    document.getElementById('modalPesquisaOverlay').style.display = 'flex';
     document.getElementById('inputBusca').value = '';
-    document.getElementById('resultadoBusca').style.display = 'none';
+    var res = document.getElementById('resultadoBusca');
+    res.style.display = 'none';
+    res.innerHTML = '';
+    abrirOverlay('modalPesquisaOverlay');
     document.getElementById('inputBusca').focus();
 }
-
 function fecharPesquisa() {
     if (nenhumResultadoPesquisa && ultimoTermoPesquisa.trim() !== "") {
         document.getElementById('processo').value = ultimoTermoPesquisa;
+        document.getElementById('tipo').value = '';
         diaSelecionado = diaAtual;
         renderizar();
-        mostrarStatus("Nenhum resultado encontrado. Campo processo preenchido com o termo da pesquisa e dia atual selecionado.");
+        mostrarStatus("Nenhum resultado. Campo preenchido e dia atual selecionado.");
         nenhumResultadoPesquisa = false;
         ultimoTermoPesquisa = "";
     }
-    document.getElementById('modalPesquisaOverlay').style.display = 'none';
+    var res = document.getElementById('resultadoBusca');
+    res.style.display = 'none';
+    res.innerHTML = '';
+    document.getElementById('inputBusca').value = '';
+    fecharOverlay('modalPesquisaOverlay');
 }
-
 function executarPesquisa() {
     const termo = document.getElementById('inputBusca').value.trim();
     const listaResultados = document.getElementById('resultadoBusca');
     listaResultados.innerHTML = '';
-    if (!termo) return;
+    if (!termo) {
+        listaResultados.style.display = 'none';
+        return;
+    }
 
     let resultados = [];
     for (let data in dados) {
         dados[data].forEach((reg, idx) => {
-            if (reg.processo.includes(termo)) resultados.push({ data, idx, processo: reg.processo, tipo: 'processo' });
-            if (reg.checklist && reg.checklist.matricula) {
-                const matNorm = normalizarMatricula(reg.checklist.matricula);
-                const termoNorm = normalizarMatricula(termo);
-                if (matNorm === termoNorm || reg.checklist.matricula.includes(termo)) resultados.push({ data, idx, processo: reg.processo, tipo: 'matrícula', matricula: reg.checklist.matricula });
-            }
+            if (correspondeBusca(reg.processo, termo))
+                resultados.push({ data, idx, processo: reg.processo, tipo: 'processo' });
+            if (reg.checklist && reg.checklist.matricula && correspondeBusca(reg.checklist.matricula, termo))
+                resultados.push({ data, idx, processo: reg.processo, tipo: 'matrícula', matricula: reg.checklist.matricula });
         });
     }
 
@@ -467,11 +795,15 @@ function executarPesquisa() {
         resultados.forEach(res => {
             const item = document.createElement('div');
             item.style.cssText = "padding: 5px; border-bottom: 1px dotted #CCC; cursor: pointer; color: #003399; font-size: 11px;";
-            item.innerHTML = `<strong>Data: ${res.data}</strong> - ${res.processo} (${res.tipo === 'matrícula' ? `Matr: ${res.matricula}` : 'Processo'})`;
+            item.innerHTML = `<strong>Data: ${res.data}</strong> - ${res.processo} (${res.tipo === 'matrícula' ? `Matr: ${res.matricula}` : 'Documento'})`;
             item.onclick = () => {
                 diaSelecionado = res.data;
                 renderizar();
-                fecharPesquisa();
+                var resDiv = document.getElementById('resultadoBusca');
+                resDiv.style.display = 'none';
+                resDiv.innerHTML = '';
+                document.getElementById('inputBusca').value = '';
+                fecharOverlay('modalPesquisaOverlay');
                 setTimeout(() => {
                     const divs = document.querySelectorAll('.registro');
                     for (let i = 0; i < divs.length; i++) {
@@ -491,15 +823,307 @@ function executarPesquisa() {
         nenhumResultadoPesquisa = true;
         ultimoTermoPesquisa = termo;
         listaResultados.style.display = 'block';
-        listaResultados.innerHTML = '<div style="padding:5px; color:red;">Nenhum processo ou matrícula encontrado.</div>';
+        listaResultados.innerHTML = '<div style="padding:5px; color:red;">Nenhum documento ou matrícula encontrado.</div>';
+    }
+}
+
+/* ============================================================ */
+/* ========== CONFIGURAÇÃO DE TIPOS E ITENS =================== */
+/* ============================================================ */
+
+function abrirConfig() {
+    if (!Object.keys(tiposConfig).length) {
+        tiposPadraoNomes().forEach(function (t) { tiposConfig[t] = { itens: [] }; });
+        salvarTiposConfig();
+        carregarOrdemTipos();
+    }
+    tipoConfigSelecionado = ordemTipos[0] || Object.keys(tiposConfig)[0] || null;
+    tipoConfigPendenteNome = null;
+    renderizarConfig();
+    abrirOverlay('modalConfigOverlay');
+}
+
+function fecharConfig() {
+    if (tipoConfigPendenteNome && tiposConfig[tipoConfigPendenteNome]) {
+        var itensPend = tiposConfig[tipoConfigPendenteNome].itens || [];
+        if (itensPend.length === 0) {
+            delete tiposConfig[tipoConfigPendenteNome];
+            ordemTipos = ordemTipos.filter(function (t) { return t !== tipoConfigPendenteNome; });
+            salvarTiposConfig();
+            salvarOrdemTipos();
+            popularSelectTipos();
+            mostrarStatus("Tipo '" + tipoConfigPendenteNome + "' descartado (sem itens).");
+        }
+        tipoConfigPendenteNome = null;
+    }
+    fecharOverlay('modalConfigOverlay');
+}
+
+function renderizarConfig() {
+    var listaTipos = document.getElementById('configListaTipos');
+    listaTipos.innerHTML = '';
+    ordemTipos.forEach(function (t) {
+        if (!tiposConfig[t]) return;
+        var item = document.createElement('div');
+        var pendente = (tipoConfigPendenteNome === t);
+        item.className = 'config-tipo-item' + (t === tipoConfigSelecionado ? ' selecionado' : '') + (pendente ? ' pendente' : '');
+        item.textContent = t + (pendente ? ' *' : '');
+        item.setAttribute('data-tipo', t);
+        item.draggable = true;
+        item.addEventListener('click', function () { tipoConfigSelecionado = t; renderizarConfig(); });
+
+        item.addEventListener('dragstart', function (e) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', t);
+            item.classList.add('arrastando');
+        });
+        item.addEventListener('dragend', function () { item.classList.remove('arrastando'); });
+        item.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            item.classList.add('sobre');
+        });
+        item.addEventListener('dragleave', function () { item.classList.remove('sobre'); });
+        item.addEventListener('drop', function (e) {
+            e.preventDefault();
+            item.classList.remove('sobre');
+            var origem = e.dataTransfer.getData('text/plain');
+            var destino = t;
+            if (!origem || origem === destino) return;
+            var idxOrig = ordemTipos.indexOf(origem);
+            var idxDest = ordemTipos.indexOf(destino);
+            if (idxOrig === -1 || idxDest === -1) return;
+            ordemTipos.splice(idxOrig, 1);
+            ordemTipos.splice(idxDest, 0, origem);
+            salvarOrdemTipos();
+            popularSelectTipos();
+            renderizarConfig();
+            mostrarStatus("Ordem atualizada.");
+        });
+
+        listaTipos.appendChild(item);
+    });
+
+    var spanNome = document.getElementById('configTipoNomeAtual');
+    if (spanNome) spanNome.textContent = tipoConfigSelecionado || '(nenhum)';
+
+    var listaItens = document.getElementById('configListaItens');
+    listaItens.innerHTML = '';
+
+    if (!tipoConfigSelecionado || !tiposConfig[tipoConfigSelecionado]) {
+        listaItens.innerHTML = '<div class="config-vazio">Nenhum tipo selecionado.</div>';
+    } else {
+        var itens = tiposConfig[tipoConfigSelecionado].itens;
+        if (!itens.length) {
+            listaItens.innerHTML = '<div class="config-vazio">Nenhum item. Clique em "➕ Adicionar Item".</div>';
+        } else {
+            itens.forEach(function (it, idx) {
+                var row = document.createElement('div');
+                row.className = 'config-item-row';
+                var inp = document.createElement('input');
+                inp.type = 'text';
+                inp.className = 'config-item-input';
+                inp.placeholder = 'Adicione um nome';
+                inp.value = it;
+                inp.setAttribute('data-idx', idx);
+                inp.addEventListener('input', function () {
+                    if (!tipoConfigSelecionado || !tiposConfig[tipoConfigSelecionado]) return;
+                    tiposConfig[tipoConfigSelecionado].itens[idx] = inp.value;
+                    salvarTiposConfig();
+                    atualizarBotoesTipo();
+                });
+                inp.addEventListener('blur', function () {
+                    if (!tipoConfigSelecionado || !tiposConfig[tipoConfigSelecionado]) return;
+                    tiposConfig[tipoConfigSelecionado].itens[idx] = inp.value;
+                    salvarTiposConfig();
+                    atualizarBotoesTipo();
+                });
+                var btnDel = document.createElement('button');
+                btnDel.type = 'button';
+                btnDel.className = 'config-item-del';
+                btnDel.textContent = '🗑️';
+                btnDel.title = 'Remover item';
+                btnDel.setAttribute('data-idx', idx);
+                btnDel.setAttribute('onclick', 'removerItemConfig(' + idx + ')');
+                row.appendChild(inp);
+                row.appendChild(btnDel);
+                listaItens.appendChild(row);
+            });
+        }
+    }
+    atualizarBotoesTipo();
+}
+
+function atualizarBotoesTipo() {
+    var btnSalvar = document.getElementById('configBtnSalvarTipo');
+    var btnCancelar = document.getElementById('configBtnCancelarTipo');
+    if (btnSalvar) {
+        var temItensValidos = false;
+        if (tipoConfigSelecionado && tiposConfig[tipoConfigSelecionado]) {
+            var itens = tiposConfig[tipoConfigSelecionado].itens || [];
+            temItensValidos = itens.length > 0 && itens.every(function (it) { return it && String(it).trim() !== ''; });
+        }
+        btnSalvar.disabled = !temItensValidos;
+    }
+    if (btnCancelar) {
+        btnCancelar.style.display = (tipoConfigPendenteNome === tipoConfigSelecionado) ? '' : 'none';
+    }
+}
+
+function abrirModalNovoTipo() {
+    var inp = document.getElementById('novoTipoNomeInput');
+    if (inp) inp.value = '';
+    abrirOverlay('modalNovoTipoOverlay');
+    setTimeout(function () { if (inp) inp.focus(); }, 50);
+}
+function fecharModalNovoTipo() { fecharOverlay('modalNovoTipoOverlay'); }
+
+function confirmarNovoTipo() {
+    var input = document.getElementById('novoTipoNomeInput');
+    if (!input) return;
+    var nome = (input.value || '').trim().toLowerCase();
+    if (!nome) {
+        mostrarErroModal("Digite um nome para o novo tipo.");
+        input.focus();
+        return;
+    }
+    if (tiposConfig[nome]) {
+        mostrarErroModal("Já existe um tipo com esse nome.");
+        input.focus();
+        input.select();
+        return;
+    }
+    tiposConfig[nome] = { itens: [] };
+    ordemTipos.push(nome);
+    tipoConfigSelecionado = nome;
+    tipoConfigPendenteNome = nome;
+    salvarTiposConfig();
+    salvarOrdemTipos();
+    popularSelectTipos();
+    renderizarConfig();
+    fecharModalNovoTipo();
+    mostrarStatus("Tipo '" + nome + "' criado. Adicione ao menos um item e clique em Salvar.");
+}
+
+function removerTipoConfig() {
+    if (!tipoConfigSelecionado) return;
+    if (Object.keys(tiposConfig).length <= 1) {
+        mostrarErroModal("Não é possível remover o último tipo.");
+        return;
+    }
+    var alvo = tipoConfigSelecionado;
+    abrirConfirma("Remover Tipo", "Remover o tipo '" + alvo + "' e todos os seus itens?", function () {
+        delete tiposConfig[alvo];
+        ordemTipos = ordemTipos.filter(function (t) { return t !== alvo; });
+        if (tipoConfigPendenteNome === alvo) tipoConfigPendenteNome = null;
+        tipoConfigSelecionado = ordemTipos[0] || Object.keys(tiposConfig)[0] || null;
+        salvarTiposConfig();
+        salvarOrdemTipos();
+        popularSelectTipos();
+        renderizarConfig();
+        mostrarStatus("Tipo removido.");
+    });
+}
+
+function adicionarItemConfig() {
+    if (!tipoConfigSelecionado) {
+        mostrarErroModal("Selecione ou crie um tipo primeiro.");
+        return;
+    }
+    tiposConfig[tipoConfigSelecionado].itens.push("");
+    salvarTiposConfig();
+    renderizarConfig();
+    setTimeout(function () {
+        var inputs = document.querySelectorAll('#configListaItens .config-item-input');
+        var last = inputs[inputs.length - 1];
+        if (last) last.focus();
+    }, 30);
+    mostrarStatus("Item adicionado. Digite o nome diretamente.");
+}
+
+function removerItemConfig(idx) {
+    if (!tipoConfigSelecionado) return;
+    if (!tiposConfig[tipoConfigSelecionado]) return;
+    var itens = tiposConfig[tipoConfigSelecionado].itens;
+    idx = parseInt(idx);
+    if (isNaN(idx) || idx < 0 || idx >= itens.length) return;
+    itens.splice(idx, 1);
+    salvarTiposConfig();
+    renderizarConfig();
+    mostrarStatus("Item removido.");
+}
+
+function salvarTipoConfigAtual() {
+    if (!tipoConfigSelecionado || !tiposConfig[tipoConfigSelecionado]) return;
+    var itens = tiposConfig[tipoConfigSelecionado].itens || [];
+    if (itens.length === 0) {
+        mostrarErroModal("Adicione ao menos um item antes de salvar.");
+        return;
+    }
+    var vazios = itens.filter(function (it) { return !it || String(it).trim() === ''; }).length;
+    if (vazios > 0) {
+        mostrarErroModal("Todos os itens precisam ter um nome antes de salvar.");
+        return;
+    }
+    if (tipoConfigPendenteNome === tipoConfigSelecionado) {
+        tipoConfigPendenteNome = null;
+    }
+    salvarTiposConfig();
+    renderizarConfig();
+    popularSelectTipos();
+    mostrarStatus("Tipo '" + tipoConfigSelecionado + "' salvo.");
+}
+
+function cancelarTipoConfigAtual() {
+    if (!tipoConfigSelecionado) return;
+    if (tipoConfigPendenteNome === tipoConfigSelecionado) {
+        delete tiposConfig[tipoConfigSelecionado];
+        ordemTipos = ordemTipos.filter(function (t) { return t !== tipoConfigSelecionado; });
+        tipoConfigPendenteNome = null;
+        salvarTiposConfig();
+        salvarOrdemTipos();
+        popularSelectTipos();
+        tipoConfigSelecionado = ordemTipos[0] || null;
+        renderizarConfig();
+        mostrarStatus("Criação cancelada. Tipo descartado.");
     }
 }
 
 /* ---------- INICIALIZAÇÃO ---------- */
 var salvo = localStorage.getItem('registros_processos');
-if (salvo) dados = JSON.parse(salvo);
+if (salvo) { try { dados = JSON.parse(salvo); } catch (e) { dados = {}; } }
+inicializarTiposConfig();
+popularSelectTipos();
 renderizar();
 document.getElementById('ano-atual').textContent = new Date().getFullYear();
+inicializarModais();
+
+(function () {
+    var inp = document.getElementById('novoTipoNomeInput');
+    if (inp && !inp.__bound) {
+        inp.__bound = true;
+        inp.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); confirmarNovoTipo(); }
+        });
+    }
+})();
+
+(function () {
+    var sel = document.getElementById('tipo');
+    if (sel && !sel.__bound) {
+        sel.__bound = true;
+        sel.addEventListener('change', atualizarBotaoAdicionar);
+    }
+})();
+
+(function () {
+    document.querySelectorAll('input[name=fluxo]').forEach(function (r) {
+        if (r.__bound) return;
+        r.__bound = true;
+        r.addEventListener('change', atualizarBotaoAdicionar);
+    });
+})();
+
 async function carregarFraseClippy() {
     const fraseSpan = document.getElementById('frase-clippy');
     fraseSpan.innerText = "Clippy diz: Pensando...";
@@ -515,36 +1139,38 @@ async function carregarFraseClippy() {
 }
 carregarFraseClippy();
 
-/* ========== FUNÇÃO ADICIONAR REGISTRO MODIFICADA ========== */
+/* ========== ADICIONAR REGISTRO ========== */
 function adicionarRegistro() {
     if (diaSelecionado !== diaAtual) return;
     var proc = document.getElementById('processo').value.trim();
-    if (!proc) return;
+    var tipoSel = document.getElementById('tipo').value;
+    if (!tipoSel || !tiposConfig[tipoSel]) {
+        atualizarBotaoAdicionar();
+        return;
+    }
+    var fluxoInput = document.querySelector('input[name=fluxo]:checked');
+    if (!fluxoInput) {
+        atualizarBotaoAdicionar();
+        return;
+    }
+    if (!proc) {
+        mostrarStatus("Informe o número do documento.");
+        return;
+    }
     if (!dados[diaSelecionado]) dados[diaSelecionado] = [];
-    var fluxo = document.querySelector('input[name=fluxo]:checked').value;
+    var fluxo = fluxoInput.value;
 
-    // --- VERIFICAR SE O PROCESSO JÁ EXISTE EM DATA ANTERIOR ---
     var registroAnterior = buscarRegistroAnteriorPorProcesso(proc);
     var checklistCopiado = null;
     var notaReferencia = "";
     if (registroAnterior) {
-        // Espelhar o checklist (cópia profunda)
         if (registroAnterior.checklist) {
             checklistCopiado = JSON.parse(JSON.stringify(registroAnterior.checklist));
-            // Incrementar versão para indicar cópia? Não solicitado, mas manter a versão original
-            // Ajustar a data da cópia para o momento atual
-            if (checklistCopiado) {
-                checklistCopiado.data = new Date().toISOString();
-                // versão permanece a mesma do original, pois é um espelho
-            }
+            if (checklistCopiado) checklistCopiado.data = new Date().toISOString();
         }
-        // Formatar data anterior no formato dd/mm/aaaa
         var dataAnterior = null;
         for (let d in dados) {
-            if (dados[d].indexOf(registroAnterior) !== -1) {
-                dataAnterior = d;
-                break;
-            }
+            if (dados[d].indexOf(registroAnterior) !== -1) { dataAnterior = d; break; }
         }
         if (dataAnterior) {
             var partes = dataAnterior.split('-');
@@ -557,7 +1183,7 @@ function adicionarRegistro() {
 
     var novoRegistro = {
         processo: proc,
-        tipo: document.getElementById('tipo').value,
+        tipo: tipoSel,
         fluxo: fluxo,
         concluido: false,
         nota: "",
@@ -565,56 +1191,15 @@ function adicionarRegistro() {
         atualizacao: false,
         tempo: false,
         obras: false,
-        checklist: checklistCopiado  // se encontrou anterior, copia; senão, null
+        checklist: checklistCopiado
     };
-
-    // Adicionar referência na nota (não substitui nada, pois nota está vazia. Se houvesse conteúdo, colocaria abaixo, mas não há)
-    if (notaReferencia) {
-        novoRegistro.nota = notaReferencia;
-    }
+    if (notaReferencia) novoRegistro.nota = notaReferencia;
 
     dados[diaSelecionado].push(novoRegistro);
     document.getElementById('processo').value = '';
+    document.getElementById('tipo').value = '';
+    document.querySelectorAll('input[name=fluxo]').forEach(function (r) { r.checked = false; });
     salvarNavegador();
     renderizar();
-    if (registroAnterior) {
-        mostrarStatus("Processo registrado com checklist e referência copiados.");
-    } else {
-        mostrarStatus("Processo registrado.");
-    }
+    mostrarStatus(registroAnterior ? "Registro adicionado com checklist copiado." : "Registro adicionado.");
 }
-
-// Arrastável
-(function () {
-    const modal = document.getElementById('modalChecklistOverlay');
-    const container = modal.querySelector('.modal-checklist-container');
-    const titleBar = container.querySelector('.title-bar');
-    let posX = 0, posY = 0, mouseX = 0, mouseY = 0;
-    let dragging = false;
-    titleBar.style.cursor = 'move';
-    titleBar.style.userSelect = 'none';
-    titleBar.addEventListener('mousedown', (e) => {
-        let target = e.target;
-        while (target && target !== titleBar) {
-            if (target.tagName === 'BUTTON') return;
-            target = target.parentElement;
-        }
-        dragging = true;
-        mouseX = e.clientX;
-        mouseY = e.clientY;
-        const rect = container.getBoundingClientRect();
-        posX = rect.left;
-        posY = rect.top;
-        container.style.position = 'absolute';
-        container.style.margin = '0';
-        e.preventDefault();
-    });
-    window.addEventListener('mousemove', (e) => {
-        if (!dragging) return;
-        const dx = e.clientX - mouseX;
-        const dy = e.clientY - mouseY;
-        container.style.left = (posX + dx) + 'px';
-        container.style.top = (posY + dy) + 'px';
-    });
-    window.addEventListener('mouseup', () => { dragging = false; });
-})();

@@ -346,10 +346,10 @@ button {
     z-index: 10000;
 }
 
-/* ===== MODAL CHECKLIST - ESTRUTURA CORRIGIDA ===== */
 .modal-checklist-container {
-    max-width: 440px;
-    width: 95%;
+    width: 440px !important;
+    max-width: 95%;
+    height: 620px !important;
     max-height: 90vh;
     background: #ECE9D8;
     border: 1px solid #003399;
@@ -357,6 +357,7 @@ button {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    box-sizing: border-box;
 }
 
 .modal-checklist-body {
@@ -510,3 +511,149 @@ input[type="checkbox"].na {
 input[type="checkbox"].revisar {
     accent-color: #3498db;
 }
+/* ===== MODAL CONFIG ===== */
+/* ===== CONFIG ===== */
+.modal-config-container {
+    width: 660px !important;
+    max-width: 95%;
+    height: 540px !important;
+    max-height: 90vh;
+    background: #ECE9D8;
+    border: 1px solid #003399;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.modal-config-body {
+    flex: 1;
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    overflow: hidden;
+    min-height: 0;
+    background: #F4F3EE;
+}
+
+.config-painel-esquerdo,
+.config-painel-direito {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #7F9DB9;
+    background: #FFF;
+    padding: 10px;
+    overflow: hidden;
+    min-height: 0;
+    box-sizing: border-box;
+}
+.config-painel-esquerdo { flex: 1; min-width: 200px; }
+.config-painel-direito  { flex: 2; min-width: 280px; }
+
+.config-painel-titulo {
+    font-weight: bold;
+    color: #003399;
+    margin-bottom: 8px;
+    font-size: 11px;
+}
+.config-tipo-nome-atual { color: #333; font-weight: normal; }
+
+.config-lista-tipos,
+.config-lista-itens {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border: 1px solid #D1D1B4;
+    background: #FFF;
+    min-height: 0;
+    margin-bottom: 10px;
+}
+
+.config-tipo-item {
+    padding: 6px 10px;
+    cursor: pointer;
+    border-bottom: 1px dotted #CCC;
+    font-size: 11px;
+    user-select: none;
+}
+.config-tipo-item.selecionado { background: #003399; color: #FFF; }
+.config-tipo-item.pendente { font-style: italic; }
+.config-tipo-item:hover:not(.selecionado) { background: #DCE6F5; }
+.config-tipo-item.arrastando { opacity: 0.4; }
+.config-tipo-item.sobre { border-top: 2px solid #003399; }
+
+.config-item-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-bottom: 1px dotted #CCC;
+}
+.config-item-input {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 4px 6px;
+    font-size: 11px;
+    font-family: Tahoma, sans-serif;
+    border: 1px solid transparent;
+    background: transparent;
+    box-sizing: border-box;
+    text-align: left;
+}
+.config-item-input::placeholder { color: #999; font-style: italic; }
+.config-item-input:hover { border-color: #D1D1B4; background: #FFF; }
+.config-item-input:focus { border-color: #7F9DB9; background: #FFF; outline: none; }
+.config-item-row .config-item-del { flex-shrink: 0; padding: 2px 8px; font-size: 11px; }
+
+.config-vazio {
+    padding: 14px;
+    color: #888;
+    text-align: center;
+    font-style: italic;
+    font-size: 11px;
+}
+
+/* Botões em coluna (esquerdo) */
+.config-painel-botoes-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+    flex-shrink: 0;
+}
+.config-painel-botoes-vertical button {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Botões em linha (direito) */
+.config-painel-botoes {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+.config-painel-botoes button,
+.config-painel-botoes .config-btn-metade {
+    flex: 1 1 0;
+    min-width: 0;
+    box-sizing: border-box;
+}
+.config-painel-botoes button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.config-btn-file {
+    background: linear-gradient(to bottom, #ffffff 0%, #ebebe4 45%, #d1d1c9 50%, #ebebe4 100%);
+    border: 1px solid #003c74;
+    border-radius: 3px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#modalErroTexto { white-space: pre-line; }
